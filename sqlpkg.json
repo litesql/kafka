@@ -6,7 +6,7 @@
     "authors": ["Walter Wanderley"],
     "license": "MIT",
     "description": "SQLite extension to Kafka",
-    "symbols": ["kafka_pub", "kafka_sub"],
+    "symbols": ["kafka_producer", "kafka_consumer"],
     "assets": {
         "files": {
             "darwin-amd64": "kafka_{version}_Darwin_x86_64.tar.gz",
