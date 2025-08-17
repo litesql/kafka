@@ -1,0 +1,5 @@
+*.so
+kafka.h
+
+# Added by goreleaser init:
+dist/
