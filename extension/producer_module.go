@@ -3,7 +3,9 @@ package extension
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/walterwanderley/sqlite"
@@ -21,8 +23,12 @@ func (m *ProducerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 	}
 
 	var (
-		opts   = make([]kgo.Opt, 0)
-		logger string
+		opts = make([]kgo.Opt, 0)
+
+		clientID       string
+		manualFlushing bool
+		transactional  bool
+		logger         string
 	)
 	if len(args) > 3 {
 		for _, opt := range args[3:] {
@@ -38,16 +44,53 @@ func (m *ProducerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 			case config.Brokers:
 				opts = append(opts, kgo.SeedBrokers(strings.Split(v, ",")...))
 			case config.ClientID:
+				clientID = v
 				opts = append(opts, kgo.ClientID(v))
+			case config.FlushOnCommit:
+				opts = append(opts, kgo.ManualFlushing())
+				manualFlushing = true
+			case config.MaxBufferedRecords:
+				i, err := strconv.Atoi(v)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %q option value: %w", k, err)
+				}
+				opts = append(opts, kgo.MaxBufferedRecords(i))
+			case config.TransactionalID:
+				opts = append(opts, kgo.TransactionalID(v))
+				if v != "" {
+					transactional = true
+				}
+			case config.TransactionTimeout:
+				timeout, err := time.ParseDuration(v)
+				if err != nil {
+					return nil, fmt.Errorf("invalid %q option value: %w", k, err)
+				}
+				opts = append(opts, kgo.TransactionTimeout(timeout))
 			default:
 				return nil, fmt.Errorf("unknown %q option", k)
 			}
 		}
 	}
 
-	vtab, err := NewProducerVirtualTable(virtualTableName, opts, logger)
-	if err != nil {
-		return nil, err
+	if clientID == "" {
+		clientID = "sqlite"
+	}
+	opts = append(opts, kgo.ClientID(clientID))
+
+	var (
+		vtab sqlite.VirtualTable
+		err  error
+	)
+	if transactional {
+		vtab, err = NewTransactionalProducerVirtualTable(virtualTableName, opts, manualFlushing, logger)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		vtab, err = NewProducerVirtualTable(virtualTableName, opts, manualFlushing, logger)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return vtab,

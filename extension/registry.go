@@ -7,7 +7,8 @@ import (
 )
 
 func registerFunc(api *sqlite.ExtensionApi) (sqlite.ErrorCode, error) {
-	if err := api.CreateModule(config.DefaultProducerVTabName, &ProducerModule{}, sqlite.ReadOnly(false)); err != nil {
+	if err := api.CreateModule(config.DefaultProducerVTabName, &ProducerModule{},
+		sqlite.ReadOnly(false), sqlite.Transaction(true)); err != nil {
 		return sqlite.SQLITE_ERROR, err
 	}
 	if err := api.CreateModule(config.DefaultConsumerVTabName, &ConsumerModule{}, sqlite.ReadOnly(false)); err != nil {

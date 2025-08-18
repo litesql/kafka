@@ -12,34 +12,34 @@ import (
 )
 
 type ProducerVirtualTable struct {
-	client       *kgo.Client
-	name         string
-	logger       *slog.Logger
-	loggerCloser io.Closer
+	client         *kgo.Client
+	name           string
+	logger         *slog.Logger
+	loggerCloser   io.Closer
+	manualFlushing bool
 }
 
-func NewProducerVirtualTable(name string, opts []kgo.Opt, loggerDef string) (*ProducerVirtualTable, error) {
-	kgo.NewClient(kgo.SeedBrokers())
-	vtab := ProducerVirtualTable{
-		name: name,
-	}
-
+func NewProducerVirtualTable(name string, opts []kgo.Opt, manualFlushing bool, loggerDef string) (*ProducerVirtualTable, error) {
 	logger, loggerCloser, err := loggerFromConfig(loggerDef)
 	if err != nil {
 		return nil, err
 	}
-	vtab.loggerCloser = loggerCloser
-	vtab.logger = logger
 
+	var client *kgo.Client
 	if len(opts) > 0 {
-		client, err := kgo.NewClient(opts...)
+		client, err = kgo.NewClient(opts...)
 		if err != nil {
 			return nil, fmt.Errorf("creating new client: %w", err)
 		}
-		vtab.client = client
 	}
 
-	return &vtab, nil
+	return &ProducerVirtualTable{
+		name:           name,
+		client:         client,
+		manualFlushing: manualFlushing,
+		logger:         logger,
+		loggerCloser:   loggerCloser,
+	}, nil
 }
 
 func (vt *ProducerVirtualTable) BestIndex(in *sqlite.IndexInfoInput) (*sqlite.IndexInfoOutput, error) {
@@ -82,8 +82,12 @@ func (vt *ProducerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 		Value:     payload,
 		Timestamp: time.Now(),
 	})
+	err := res.FirstErr()
+	if err != nil {
+		return 0, fmt.Errorf("kafka producer: %w", err)
+	}
 
-	return 0, res.FirstErr()
+	return 0, nil
 }
 
 func (vt *ProducerVirtualTable) Update(_ sqlite.Value, _ ...sqlite.Value) error {
@@ -96,4 +100,22 @@ func (vt *ProducerVirtualTable) Replace(old sqlite.Value, new sqlite.Value, _ ..
 
 func (vt *ProducerVirtualTable) Delete(_ sqlite.Value) error {
 	return fmt.Errorf("DELETE operations on %q is not supported", vt.name)
+}
+
+func (vt *ProducerVirtualTable) Begin() error {
+	return nil
+}
+
+func (vt *ProducerVirtualTable) Commit() error {
+	if vt.client == nil || !vt.manualFlushing {
+		return nil
+	}
+	return vt.client.Flush(context.Background())
+}
+
+func (vt *ProducerVirtualTable) Rollback() error {
+	if vt.client == nil || !vt.manualFlushing {
+		return nil
+	}
+	return vt.client.Flush(context.Background())
 }

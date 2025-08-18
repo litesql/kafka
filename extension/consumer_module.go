@@ -45,6 +45,15 @@ func (m *ConsumerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 				opts = append(opts, kgo.SeedBrokers(strings.Split(v, ",")...))
 			case config.ConsumerGroup:
 				opts = append(opts, kgo.ConsumerGroup(v))
+			case config.IsolationLevel:
+				switch v {
+				case "0":
+					opts = append(opts, kgo.FetchIsolationLevel(kgo.ReadUncommitted()))
+				case "1":
+					opts = append(opts, kgo.FetchIsolationLevel(kgo.ReadCommitted()))
+				default:
+					return nil, fmt.Errorf("invalid %q option value: must be 0 or 1", k)
+				}
 			default:
 				return nil, fmt.Errorf("unknown %q option", k)
 			}

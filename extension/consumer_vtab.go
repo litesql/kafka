@@ -151,7 +151,6 @@ func (vt *ConsumerVirtualTable) Delete(v sqlite.Value) error {
 	index := v.Int()
 	// slices are 0 based
 	index--
-
 	if index >= 0 && index < len(vt.subscriptions) {
 		vt.client.PurgeTopicsFromClient(vt.subscriptions[index])
 		vt.subscriptions = slices.Delete(vt.subscriptions, index, index+1)

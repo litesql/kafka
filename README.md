@@ -49,7 +49,7 @@ TABLE temp.consumer(
 
 ```sh
 # Create a virtual table using KAFKA_PRODUCER to configure the connection to the broker
-CREATE VIRTUAL TABLE temp.producer USING kafka_producer(brokers='localhost:44475', logger='stdout');
+CREATE VIRTUAL TABLE temp.producer USING kafka_producer(brokers='localhost:44475');
 
 # Insert data into the created virtual table to produce messages
 INSERT INTO temp.producer(topic, key, value) VALUES('my_topic', 'hello', 'world');
@@ -116,10 +116,15 @@ DELETE FROM temp.consumer WHERE topic = 'my_topic';
 
 You can configure the connection to the broker by passing parameters to the VIRTUAL TABLE.
 
-| Param | Description | Default |
-|-------|-------------|---------|
-| brokers | Comma delimited list of seed brokers | |
-| client_id | Client ID sendo to all requests to kafka brokers | |
-| consumer_group | Consumer group. Only for kafka_consumer | |
-| table | Name of the table where incoming messages will be stored. Only for kafka_consumer | kafka_data |
-| logger | Log errors to stdout, stderr or file:/path/to/file.log |
+| Param | P/C/B | Description | Default |
+|-------|------|-------------|---------|
+| brokers | Both | Comma delimited list of seed brokers | |
+| client_id | Both | Client ID sendo to all requests to kafka brokers | sqlite |
+| flush_on_commit | Producer | Disable auto-flush and exec flush on commit | false |
+| max_buffered_records | Producer | Max producer buffered records | 10000 |
+| transactional_id | Producer | Transactional ID (if not empty enable transaction API support) | |
+| transaction_timeout | Producer | Transaction timeout | 45s (45 seconds) |
+| consumer_group | Consumer | Consumer group. Only for kafka_consumer | |
+| isolation_level | Consumer | Fetch isolation level. 0 = read uncommitted (default), 1 = read committed
+| table | Consumer | Name of the table where incoming messages will be stored. Only for kafka_consumer | kafka_data |
+| logger | Both | Log errors to stdout, stderr or file:/path/to/file.log |
