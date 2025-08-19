@@ -32,7 +32,7 @@ builds:
     goos:
       - linux
     goarch:
-      - amd64
+      - arm64
     env:
       - CGO_ENABLED=1
       - CC=zig cc -target aarch64-linux-gnu
