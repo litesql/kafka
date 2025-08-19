@@ -22,14 +22,14 @@ type ProducerVirtualTable struct {
 }
 
 func NewProducerVirtualTable(name string, opts []kgo.Opt, timeout time.Duration, manualFlushing bool, loggerDef string) (*ProducerVirtualTable, error) {
-	logger, loggerCloser, err := loggerFromConfig(loggerDef)
-	if err != nil {
-		return nil, err
-	}
-
 	client, err := kgo.NewClient(opts...)
 	if err != nil {
 		return nil, fmt.Errorf("creating new client: %w", err)
+	}
+
+	logger, loggerCloser, err := loggerFromConfig(loggerDef)
+	if err != nil {
+		return nil, err
 	}
 
 	return &ProducerVirtualTable{
@@ -47,7 +47,7 @@ func (vt *ProducerVirtualTable) BestIndex(in *sqlite.IndexInfoInput) (*sqlite.In
 }
 
 func (vt *ProducerVirtualTable) Open() (sqlite.VirtualCursor, error) {
-	return nil, fmt.Errorf("SELECT operations on %q is not supported", vt.name)
+	return nil, fmt.Errorf("SELECT operations on %q are not supported", vt.name)
 }
 
 func (vt *ProducerVirtualTable) Disconnect() error {
@@ -110,15 +110,15 @@ func (vt *ProducerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 }
 
 func (vt *ProducerVirtualTable) Update(_ sqlite.Value, _ ...sqlite.Value) error {
-	return fmt.Errorf("UPDATE operations on %q is not supported", vt.name)
+	return fmt.Errorf("UPDATE operations on %q are not supported", vt.name)
 }
 
 func (vt *ProducerVirtualTable) Replace(old sqlite.Value, new sqlite.Value, _ ...sqlite.Value) error {
-	return fmt.Errorf("UPDATE operations on %q is not supported", vt.name)
+	return fmt.Errorf("UPDATE operations on %q are not supported", vt.name)
 }
 
 func (vt *ProducerVirtualTable) Delete(_ sqlite.Value) error {
-	return fmt.Errorf("DELETE operations on %q is not supported", vt.name)
+	return fmt.Errorf("DELETE operations on %q are not supported", vt.name)
 }
 
 func (vt *ProducerVirtualTable) Begin() error {

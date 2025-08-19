@@ -14,9 +14,10 @@ const (
 	Logger      = "logger"        // Log errors to "stdout, stderr or file:/path/to/log.txt"
 
 	// Consumer module config
-	TableName      = "table"           // table name where to store the incoming messages
-	ConsumerGroup  = "consumer_group"  // Consumer group
-	IsolationLevel = "isolation_level" // Fetch isolation level: 0 = read uncommitted (default), 1 = read committed
+	TableName       = "table"             // table name where to store the incoming messages
+	ConsumerGroup   = "consumer_group"    // Consumer group
+	IsolationLevel  = "isolation_level"   // Fetch isolation level: 0 = read uncommitted (default), 1 = read committed
+	AutoOffsetReset = "auto_offset_reset" // Determines the behavior of a consumer group when there is no valid committed offset for a partition. (latest, earliest, none)
 
 	// Producer module config
 	Timeout            = "timeout"              // Producer timeout default 10s

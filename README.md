@@ -35,6 +35,17 @@ CREATE VIRTUAL TABLE temp.consumer USING kafka_consumer(brokers='localhost:44475
 
 # Insert the topic name into the created virtual table to subscribe
 INSERT INTO temp.consumer(topic) VALUES('my_topic');
+
+# To start consuming a partition at specific offset. Example:
+# partition 0 at earliest offset
+# partition 1 at latest offset
+# partition 2 at offset 42
+INSERT INTO temp.consumer(topic, offsets) VALUES('my_topic', 
+'{
+  "0": "earliest", 
+  "1": "latest",
+  "2": "42"
+}');
 ```
 
 Consumer table schema:
@@ -117,7 +128,7 @@ DELETE FROM temp.consumer WHERE topic = 'my_topic';
 
 #### Set offsets
 
-Set the partitions offset of the consumer by updating the *offsets* column:
+To set the consumer's partition offsets (using consumer group), just update the offsets column:
 
 ```sql
 SELECT topic, offsets FROM temp.consumer;
@@ -137,7 +148,7 @@ You can configure the connection to the broker by passing parameters to the VIRT
 | Param | P/C/B | Description | Default |
 |-------|------|-------------|---------|
 | brokers | Both | Comma delimited list of seed brokers | localhost:9092 |
-| client_id | Both | Client ID sendo to all requests to kafka brokers | sqlite |
+| client_id | Both | Client ID  | sqlite |
 | timeout | Producer | Producer timeout | 10s (10 seconds) |
 | flush_on_commit | Producer | Disable auto-flush and exec flush on commit | false |
 | max_buffered_records | Producer | Max producer buffered records | 10000 |
@@ -145,8 +156,9 @@ You can configure the connection to the broker by passing parameters to the VIRT
 | transaction_timeout | Producer | Transaction timeout | 45s |
 | consumer_group | Consumer | Consumer group | |
 | isolation_level | Consumer | Fetch isolation level. 0 = read uncommitted, 1 = read committed | 0 |
+| auto_offset_reset | Consumer | Determines the behavior of a consumer group when there is no valid committed offset for a partition. (latest, earliest or none) | |
 | table | Consumer | Name of the table where incoming messages will be stored. | kafka_data |
-| sasl_type | Both | SASL type: plain, sha256, sha512 | |
+| sasl_type | Both | SASL type: plain, sha256 or sha512 | |
 | sasl_user | Both | SASL user | |
 | sasl_pass | Both | SASL pass | |
 | insecure | Both | Insecure skip TLS validation |  |

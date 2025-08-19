@@ -73,6 +73,18 @@ func (m *ConsumerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 				default:
 					return nil, fmt.Errorf("invalid %q option value: must be 0 or 1", k)
 				}
+			case config.AutoOffsetReset:
+				switch v {
+				case "earliest":
+					opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+					opts = append(opts, kgo.ConsumeStartOffset(kgo.NewOffset().AtStart()))
+				case "latest":
+					opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtEnd()))
+					opts = append(opts, kgo.ConsumeStartOffset(kgo.NewOffset().AtEnd()))
+				case "none":
+					opts = append(opts, kgo.ConsumeResetOffset(kgo.NewOffset().AtCommitted()))
+					opts = append(opts, kgo.ConsumeStartOffset(kgo.NewOffset().AtCommitted()))
+				}
 			case config.SaslType:
 				if !validateSASLType(v) {
 					return nil, fmt.Errorf("invalid %q option value. use plain, sha256 or sha512", k)

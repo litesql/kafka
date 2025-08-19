@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -45,9 +46,14 @@ func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName 
 	vtab := ConsumerVirtualTable{
 		virtualTableName: virtualTableName,
 		tableName:        tableName,
-		subscriptions:    make([]*subscription, 0),
 		stmt:             stmt,
 	}
+
+	client, err := kgo.NewClient(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("creating new client: %w", err)
+	}
+	vtab.client = client
 
 	logger, loggerCloser, err := loggerFromConfig(loggerDef)
 	if err != nil {
@@ -55,12 +61,6 @@ func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName 
 	}
 	vtab.loggerCloser = loggerCloser
 	vtab.logger = logger
-
-	client, err := kgo.NewClient(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("creating new client: %w", err)
-	}
-	vtab.client = client
 
 	vtab.quitChan = make(chan struct{})
 	go func() {
@@ -133,14 +133,42 @@ func (vt *ConsumerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 	if topic == "" {
 		return 0, fmt.Errorf("topic is required")
 	}
+	offsets := make(map[int32]kgo.Offset)
+	newOffsets := values[1].Text()
+	if newOffsets != "" {
+		var tmp map[int32]string
+		err := json.Unmarshal([]byte(newOffsets), &tmp)
+		if err != nil {
+			return 0, fmt.Errorf("unmarshal offsets: %w", err)
+		}
+		for partition, offset := range tmp {
+			switch offset {
+			case "earliest":
+				offsets[partition] = kgo.NewOffset().AtStart()
+			case "latest":
+				offsets[partition] = kgo.NewOffset().AtEnd()
+			default:
+				i, err := strconv.ParseInt(offset, 10, 64)
+				if err != nil {
+					return 0, fmt.Errorf("invalid offset for partition %d! use 'earliest', 'latest' or a number", partition)
+				}
+				offsets[partition] = kgo.NewOffset().At(i)
+			}
+		}
+	}
 	vt.mu.Lock()
 	defer vt.mu.Unlock()
 	if vt.contains(topic) {
 		return 0, fmt.Errorf("already subscribed to the %q topic", topic)
 	}
-	vt.client.AddConsumeTopics(topic)
+	if len(offsets) > 0 {
+		vt.client.AddConsumePartitions(map[string]map[int32]kgo.Offset{
+			topic: offsets,
+		})
+	} else {
+		vt.client.AddConsumeTopics(topic)
+	}
 	vt.subscriptions = append(vt.subscriptions, &subscription{topic: topic})
-
 	return 1, nil
 }
 
@@ -148,6 +176,16 @@ func (vt *ConsumerVirtualTable) Update(id sqlite.Value, values ...sqlite.Value) 
 	topic := values[0].Text()
 	if topic == "" {
 		return fmt.Errorf("topic is required")
+	}
+	index := id.Int()
+	// slices are 0 based
+	index--
+	if !(index >= 0 && index < len(vt.subscriptions)) {
+		// nothing to update
+		return nil
+	}
+	if vt.subscriptions[index].topic != topic {
+		return fmt.Errorf("updates are restricted to offsets")
 	}
 	newOffsets := values[1].Text()
 	if newOffsets != "" {
@@ -157,6 +195,8 @@ func (vt *ConsumerVirtualTable) Update(id sqlite.Value, values ...sqlite.Value) 
 			return fmt.Errorf("unmarshal offsets: %w", err)
 		}
 		if len(offsets) > 0 {
+			vt.mu.Lock()
+			defer vt.mu.Unlock()
 			vt.client.SetOffsets(map[string]map[int32]kgo.EpochOffset{
 				topic: offsets,
 			})
@@ -166,7 +206,7 @@ func (vt *ConsumerVirtualTable) Update(id sqlite.Value, values ...sqlite.Value) 
 }
 
 func (vt *ConsumerVirtualTable) Replace(old sqlite.Value, new sqlite.Value, _ ...sqlite.Value) error {
-	return fmt.Errorf("UPDATE operations on %q is not supported", vt.virtualTableName)
+	return fmt.Errorf("REPLACE operations on %q are not supported", vt.virtualTableName)
 }
 
 func (vt *ConsumerVirtualTable) Delete(v sqlite.Value) error {

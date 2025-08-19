@@ -1,7 +1,7 @@
 {
     "owner": "litesql",
     "name": "kafka",
-    "version": "v0.0.5",
+    "version": "v0.0.6",
     "repository": "https://github.com/litesql/kafka",
     "authors": ["Walter Wanderley"],
     "license": "MIT",
@@ -12,6 +12,7 @@
             "darwin-amd64": "kafka_{version}_Darwin_x86_64.tar.gz",
             "darwin-arm64": "kafka_{version}_Darwin_arm64.tar.gz",
             "linux-amd64": "kafka_{version}_Linux_x86_64.tar.gz",
+            "linux-arm64": "kafka_{version}_Linux_arm64.tar.gz",
             "windows-amd64": "kafka_{version}_Windows_x86_64.zip"
         }
     }
