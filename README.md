@@ -34,14 +34,15 @@ SELECT kafka_info();
 CREATE VIRTUAL TABLE temp.consumer USING kafka_consumer(brokers='localhost:44475', consumer_group='sqlite-kafka');
 
 # Insert the topic name into the created virtual table to subscribe
-INSERT INTO temp.consumer VALUES('my_topic');
+INSERT INTO temp.consumer(topic) VALUES('my_topic');
 ```
 
 Consumer table schema:
 
 ```sql
 TABLE temp.consumer(
-  topic TEXT
+  topic TEXT,
+  offsets JSONB
 )
 ```
 
@@ -100,7 +101,7 @@ TABLE kafka_data(
 Query the subscription virtual table (the virtual table created using **kafka_consumer**) to view all the active subscriptions for the current SQLite connection.
 
 ```sql
-SELECT * FROM temp.consumer;
+SELECT topic FROM temp.consumer;
 ┌────────────┐
 │   topic    │
 ├────────────┤
@@ -112,6 +113,21 @@ Delete the row to unsubscribe from the topic:
 
 ```sql
 DELETE FROM temp.consumer WHERE topic = 'my_topic';
+```
+
+#### Set offsets
+
+Set the partitions offset of the consumer by updating the *offsets* column:
+
+```sql
+SELECT topic, offsets FROM temp.consumer;
+┌────────────┬─────────────────────────────────┐
+│   topic    │             offsets             │
+├────────────┼─────────────────────────────────┤
+│ 'my_topic' │ '{"0":{"Epoch":0,"Offset":36}}' │
+└────────────┴─────────────────────────────────┘
+
+UPDATE temp.consumer SET offsets = '{"0":{"Epoch":0,"Offset":12}}' WHERE topic = 'my_topic';
 ```
 
 ## Configuring

@@ -173,5 +173,5 @@ func (m *ConsumerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 	if err != nil {
 		return nil, err
 	}
-	return vtab, declare("CREATE TABLE x(topic TEXT)")
+	return vtab, declare("CREATE TABLE x(topic TEXT, offsets JSONB)")
 }

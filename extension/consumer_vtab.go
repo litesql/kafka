@@ -2,6 +2,7 @@ package extension
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,13 +21,18 @@ type ConsumerVirtualTable struct {
 	virtualTableName string
 	tableName        string
 	client           *kgo.Client
-	subscriptions    []string
+	subscriptions    []*subscription
 	stmt             *sqlite.Stmt
 	stmtMu           sync.Mutex
 	mu               sync.Mutex
 	quitChan         chan struct{}
 	logger           *slog.Logger
 	loggerCloser     io.Closer
+}
+
+type subscription struct {
+	topic   string
+	offsets map[int32]kgo.EpochOffset
 }
 
 func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName string, conn *sqlite.Conn, loggerDef string) (*ConsumerVirtualTable, error) {
@@ -39,7 +45,7 @@ func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName 
 	vtab := ConsumerVirtualTable{
 		virtualTableName: virtualTableName,
 		tableName:        tableName,
-		subscriptions:    make([]string, 0),
+		subscriptions:    make([]*subscription, 0),
 		stmt:             stmt,
 	}
 
@@ -96,8 +102,11 @@ func (vt *ConsumerVirtualTable) BestIndex(in *sqlite.IndexInfoInput) (*sqlite.In
 }
 
 func (vt *ConsumerVirtualTable) Open() (sqlite.VirtualCursor, error) {
-	if vt.client == nil {
-		return nil, fmt.Errorf("not connected to the broker")
+	commitedOffsets := vt.client.CommittedOffsets()
+	for _, sub := range vt.subscriptions {
+		if offsets, ok := commitedOffsets[sub.topic]; ok {
+			sub.offsets = offsets
+		}
 	}
 	return newSubscriptionsCursor(vt.subscriptions), nil
 }
@@ -130,13 +139,30 @@ func (vt *ConsumerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 		return 0, fmt.Errorf("already subscribed to the %q topic", topic)
 	}
 	vt.client.AddConsumeTopics(topic)
-	vt.subscriptions = append(vt.subscriptions, topic)
+	vt.subscriptions = append(vt.subscriptions, &subscription{topic: topic})
 
 	return 1, nil
 }
 
-func (vt *ConsumerVirtualTable) Update(_ sqlite.Value, _ ...sqlite.Value) error {
-	return fmt.Errorf("UPDATE operations on %q is not supported", vt.virtualTableName)
+func (vt *ConsumerVirtualTable) Update(id sqlite.Value, values ...sqlite.Value) error {
+	topic := values[0].Text()
+	if topic == "" {
+		return fmt.Errorf("topic is required")
+	}
+	newOffsets := values[1].Text()
+	if newOffsets != "" {
+		var offsets map[int32]kgo.EpochOffset
+		err := json.Unmarshal([]byte(newOffsets), &offsets)
+		if err != nil {
+			return fmt.Errorf("unmarshal offsets: %w", err)
+		}
+		if len(offsets) > 0 {
+			vt.client.SetOffsets(map[string]map[int32]kgo.EpochOffset{
+				topic: offsets,
+			})
+		}
+	}
+	return nil
 }
 
 func (vt *ConsumerVirtualTable) Replace(old sqlite.Value, new sqlite.Value, _ ...sqlite.Value) error {
@@ -150,7 +176,7 @@ func (vt *ConsumerVirtualTable) Delete(v sqlite.Value) error {
 	// slices are 0 based
 	index--
 	if index >= 0 && index < len(vt.subscriptions) {
-		vt.client.PurgeTopicsFromClient(vt.subscriptions[index])
+		vt.client.PurgeTopicsFromClient(vt.subscriptions[index].topic)
 		vt.subscriptions = slices.Delete(vt.subscriptions, index, index+1)
 	}
 	return nil
@@ -158,7 +184,7 @@ func (vt *ConsumerVirtualTable) Delete(v sqlite.Value) error {
 
 func (vt *ConsumerVirtualTable) contains(topic string) bool {
 	for _, subscription := range vt.subscriptions {
-		if subscription == topic {
+		if subscription.topic == topic {
 			return true
 		}
 	}
@@ -196,13 +222,15 @@ func (vt *ConsumerVirtualTable) insertRecord(rec *kgo.Record) error {
 }
 
 type subscriptionsCursor struct {
-	data    []string
-	current string // current row that the cursor points to
-	rowid   int64  // current rowid .. negative for EOF
+	data    []*subscription
+	current subscription // current row that the cursor points to
+	rowid   int64        // current rowid .. negative for EOF
 }
 
-func newSubscriptionsCursor(data []string) *subscriptionsCursor {
-	slices.Sort(data)
+func newSubscriptionsCursor(data []*subscription) *subscriptionsCursor {
+	slices.SortFunc(data, func(a, b *subscription) int {
+		return cmp.Compare(a.topic, b.topic)
+	})
 	return &subscriptionsCursor{
 		data: data,
 	}
@@ -215,16 +243,25 @@ func (c *subscriptionsCursor) Next() error {
 		return sqlite.SQLITE_OK
 	}
 	// slices are zero based
-	c.current = c.data[c.rowid]
+	c.current = *c.data[c.rowid]
 	c.rowid += 1
 
 	return sqlite.SQLITE_OK
 }
 
 func (c *subscriptionsCursor) Column(ctx *sqlite.VirtualTableContext, i int) error {
-	if i == 0 {
-		ctx.ResultText(c.current)
+	switch i {
+	case 0:
+		ctx.ResultText(c.current.topic)
+	case 1:
+		b, err := json.Marshal(c.current.offsets)
+		if err != nil {
+			return fmt.Errorf("marshal offsets: %w", err)
+		}
+		ctx.ResultText(string(b))
+		ctx.ResultSubType(74)
 	}
+
 	return nil
 }
 
