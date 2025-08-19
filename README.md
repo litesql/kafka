@@ -124,7 +124,7 @@ You can configure the connection to the broker by passing parameters to the VIRT
 | max_buffered_records | Producer | Max producer buffered records | 10000 |
 | transactional_id | Producer | Transactional ID (if not empty enable transaction API support) | |
 | transaction_timeout | Producer | Transaction timeout | 45s (45 seconds) |
-| consumer_group | Consumer | Consumer group. Only for kafka_consumer | |
-| isolation_level | Consumer | Fetch isolation level. 0 = read uncommitted (default), 1 = read committed
-| table | Consumer | Name of the table where incoming messages will be stored. Only for kafka_consumer | kafka_data |
+| consumer_group | Consumer | Consumer group | |
+| isolation_level | Consumer | Fetch isolation level. 0 = read uncommitted, 1 = read committed | 0 |
+| table | Consumer | Name of the table where incoming messages will be stored. | kafka_data |
 | logger | Both | Log errors to stdout, stderr or file:/path/to/file.log |
