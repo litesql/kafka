@@ -62,6 +62,7 @@ TABLE temp.producer(
   topic TEXT,   
   key BLOB, 
   value BLOB,
+  headers JSONB
 )
 ```
 

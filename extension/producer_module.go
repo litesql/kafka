@@ -94,7 +94,7 @@ func (m *ProducerModule) Connect(conn *sqlite.Conn, args []string, declare func(
 	}
 
 	return vtab,
-		declare("CREATE TABLE x(topic TEXT, key BLOB, value BLOB)")
+		declare("CREATE TABLE x(topic TEXT, key BLOB, value BLOB, headers JSONB)")
 }
 
 func sanitizeOptionValue(v string) string {

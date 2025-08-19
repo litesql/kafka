@@ -2,6 +2,7 @@ package extension
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -76,11 +77,28 @@ func (vt *ProducerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 	key := values[1].Blob()
 	payload := values[2].Blob()
 
+	headersText := values[3].Text()
+	var headers []kgo.RecordHeader
+	if headersText != "" {
+		var data map[string]string
+		err := json.Unmarshal([]byte(headersText), &data)
+		if err != nil {
+			return 0, fmt.Errorf("invalid headers: %w", err)
+		}
+		for k, v := range data {
+			headers = append(headers, kgo.RecordHeader{
+				Key:   k,
+				Value: []byte(v),
+			})
+		}
+	}
+
 	res := vt.client.ProduceSync(context.Background(), &kgo.Record{
 		Topic:     topic,
 		Key:       key,
 		Value:     payload,
 		Timestamp: time.Now(),
+		Headers:   headers,
 	})
 	err := res.FirstErr()
 	if err != nil {
