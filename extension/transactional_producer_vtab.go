@@ -3,6 +3,7 @@ package extension
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 )
@@ -11,8 +12,8 @@ type TransactionalProducerVirtualTable struct {
 	*ProducerVirtualTable
 }
 
-func NewTransactionalProducerVirtualTable(name string, opts []kgo.Opt, manualFlushing bool, loggerDef string) (*TransactionalProducerVirtualTable, error) {
-	base, err := NewProducerVirtualTable(name, opts, manualFlushing, loggerDef)
+func NewTransactionalProducerVirtualTable(name string, opts []kgo.Opt, timeout time.Duration, manualFlushing bool, loggerDef string) (*TransactionalProducerVirtualTable, error) {
+	base, err := NewProducerVirtualTable(name, opts, timeout, manualFlushing, loggerDef)
 	if err != nil {
 		return nil, err
 	}

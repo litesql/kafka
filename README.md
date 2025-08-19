@@ -89,7 +89,8 @@ TABLE kafka_data(
   partition INTEGER,
   key TEXT,
   value BLOB,
-  headers JSONB,		
+  headers JSONB,
+  offset INTEGER,
   timestamp DATETIME
 )
 ```
@@ -119,13 +120,21 @@ You can configure the connection to the broker by passing parameters to the VIRT
 
 | Param | P/C/B | Description | Default |
 |-------|------|-------------|---------|
-| brokers | Both | Comma delimited list of seed brokers | |
+| brokers | Both | Comma delimited list of seed brokers | localhost:9092 |
 | client_id | Both | Client ID sendo to all requests to kafka brokers | sqlite |
+| timeout | Producer | Producer timeout | 10s (10 seconds) |
 | flush_on_commit | Producer | Disable auto-flush and exec flush on commit | false |
 | max_buffered_records | Producer | Max producer buffered records | 10000 |
 | transactional_id | Producer | Transactional ID (if not empty enable transaction API support) | |
-| transaction_timeout | Producer | Transaction timeout | 45s (45 seconds) |
+| transaction_timeout | Producer | Transaction timeout | 45s |
 | consumer_group | Consumer | Consumer group | |
 | isolation_level | Consumer | Fetch isolation level. 0 = read uncommitted, 1 = read committed | 0 |
 | table | Consumer | Name of the table where incoming messages will be stored. | kafka_data |
+| sasl_type | Both | SASL type: plain, sha256, sha512 | |
+| sasl_user | Both | SASL user | |
+| sasl_pass | Both | SASL pass | |
+| insecure | Both | Insecure skip TLS validation |  |
+| cert_file | Both | TLS: Path to certificate file | |
+| cert_key_file | Both | TLS: Path to certificate key file | |
+| ca_file | Both | TLS: Path to CA certificate file | |
 | logger | Both | Log errors to stdout, stderr or file:/path/to/file.log |

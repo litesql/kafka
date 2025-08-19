@@ -31,7 +31,7 @@ type ConsumerVirtualTable struct {
 
 func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName string, conn *sqlite.Conn, loggerDef string) (*ConsumerVirtualTable, error) {
 
-	stmt, _, err := conn.Prepare(fmt.Sprintf(`INSERT INTO %s(topic, partition, key, value, headers, timestamp) VALUES(?, ?, ?, ?, ?, ?)`, tableName))
+	stmt, _, err := conn.Prepare(fmt.Sprintf(`INSERT INTO %s(topic, partition, key, value, headers, offset, timestamp) VALUES(?, ?, ?, ?, ?, ?, ?)`, tableName))
 	if err != nil {
 		return nil, err
 	}
@@ -50,45 +50,43 @@ func NewConsumerVirtualTable(virtualTableName string, opts []kgo.Opt, tableName 
 	vtab.loggerCloser = loggerCloser
 	vtab.logger = logger
 
-	if len(opts) > 0 {
-		client, err := kgo.NewClient(opts...)
-		if err != nil {
-			return nil, fmt.Errorf("creating new client: %w", err)
-		}
-		vtab.client = client
+	client, err := kgo.NewClient(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("creating new client: %w", err)
+	}
+	vtab.client = client
 
-		vtab.quitChan = make(chan struct{})
-		go func() {
-			for {
-				select {
-				case <-vtab.quitChan:
+	vtab.quitChan = make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-vtab.quitChan:
+				return
+			default:
+				fetches := client.PollFetches(context.Background())
+				if fetches.IsClientClosed() {
 					return
-				default:
-					fetches := client.PollFetches(context.Background())
-					if fetches.IsClientClosed() {
+				}
+				fetches.EachError(func(t string, p int32, err error) {
+					vtab.logger.Error("fetch error", "topic", t, "partition", p, "error", err)
+				})
+				var rs []*kgo.Record
+				fetches.EachRecord(func(r *kgo.Record) {
+					err := vtab.insertRecord(r)
+					if err != nil {
 						return
 					}
-					fetches.EachError(func(t string, p int32, err error) {
-						vtab.logger.Error("fetch error", "topic", t, "partition", p, "error", err)
-					})
-					var rs []*kgo.Record
-					fetches.EachRecord(func(r *kgo.Record) {
-						err := vtab.insertRecord(r)
-						if err != nil {
-							return
-						}
-						rs = append(rs, r)
-					})
-					if len(rs) == 0 {
-						continue
-					}
-					if err := client.CommitRecords(context.Background(), rs...); err != nil {
-						vtab.logger.Error("commit records", "error", err)
-					}
+					rs = append(rs, r)
+				})
+				if len(rs) == 0 {
+					continue
+				}
+				if err := client.CommitRecords(context.Background(), rs...); err != nil {
+					vtab.logger.Error("commit records", "error", err)
 				}
 			}
-		}()
-	}
+		}
+	}()
 
 	return &vtab, nil
 }
@@ -176,7 +174,7 @@ func (vt *ConsumerVirtualTable) insertRecord(rec *kgo.Record) error {
 	defer vt.stmtMu.Unlock()
 	err := vt.stmt.Reset()
 	if err != nil {
-		vt.logger.Error("reset statement", "error", err, "topic", rec.Topic, "partition", rec.Partition)
+		vt.logger.Error("reset statement", "error", err, "topic", rec.Topic, "partition", rec.Partition, "offset", rec.Offset)
 		return err
 	}
 
@@ -185,11 +183,12 @@ func (vt *ConsumerVirtualTable) insertRecord(rec *kgo.Record) error {
 	vt.stmt.BindText(3, string(rec.Key))
 	vt.stmt.BindText(4, string(rec.Value))
 	vt.stmt.BindText(5, headersBuf.String())
-	vt.stmt.BindText(6, rec.Timestamp.Format(time.RFC3339Nano))
+	vt.stmt.BindInt64(6, rec.Offset)
+	vt.stmt.BindText(7, rec.Timestamp.Format(time.RFC3339Nano))
 
 	_, err = vt.stmt.Step()
 	if err != nil {
-		vt.logger.Error("insert data", "error", err, "topic", rec.Topic, "partition", rec.Partition, "key", string(rec.Key))
+		vt.logger.Error("insert data", "error", err, "topic", rec.Topic, "partition", rec.Partition, "key", string(rec.Key), "offset", rec.Offset)
 		return err
 	}
 

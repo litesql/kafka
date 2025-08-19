@@ -17,21 +17,19 @@ type ProducerVirtualTable struct {
 	name           string
 	logger         *slog.Logger
 	loggerCloser   io.Closer
+	timeout        time.Duration
 	manualFlushing bool
 }
 
-func NewProducerVirtualTable(name string, opts []kgo.Opt, manualFlushing bool, loggerDef string) (*ProducerVirtualTable, error) {
+func NewProducerVirtualTable(name string, opts []kgo.Opt, timeout time.Duration, manualFlushing bool, loggerDef string) (*ProducerVirtualTable, error) {
 	logger, loggerCloser, err := loggerFromConfig(loggerDef)
 	if err != nil {
 		return nil, err
 	}
 
-	var client *kgo.Client
-	if len(opts) > 0 {
-		client, err = kgo.NewClient(opts...)
-		if err != nil {
-			return nil, fmt.Errorf("creating new client: %w", err)
-		}
+	client, err := kgo.NewClient(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("creating new client: %w", err)
 	}
 
 	return &ProducerVirtualTable{
@@ -40,6 +38,7 @@ func NewProducerVirtualTable(name string, opts []kgo.Opt, manualFlushing bool, l
 		manualFlushing: manualFlushing,
 		logger:         logger,
 		loggerCloser:   loggerCloser,
+		timeout:        timeout,
 	}, nil
 }
 
@@ -67,9 +66,6 @@ func (vt *ProducerVirtualTable) Destroy() error {
 }
 
 func (vt *ProducerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
-	if vt.client == nil {
-		return 0, fmt.Errorf("not connected to broker")
-	}
 	topic := values[0].Text()
 	if topic == "" {
 		return 0, fmt.Errorf("topic is required")
@@ -92,8 +88,13 @@ func (vt *ProducerVirtualTable) Insert(values ...sqlite.Value) (int64, error) {
 			})
 		}
 	}
-
-	res := vt.client.ProduceSync(context.Background(), &kgo.Record{
+	ctx := context.Background()
+	var cancel func()
+	if vt.timeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, vt.timeout)
+		defer cancel()
+	}
+	res := vt.client.ProduceSync(ctx, &kgo.Record{
 		Topic:     topic,
 		Key:       key,
 		Value:     payload,

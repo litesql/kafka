@@ -12,4 +12,5 @@ require (
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2 // indirect
+	golang.org/x/crypto v0.38.0 // indirect
 )
